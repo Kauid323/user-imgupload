@@ -1,0 +1,3 @@
+C:/Users/admin/Desktop/imgupload/img-util-c++/build64/CMakeFiles/img-util-cpp.dir
+C:/Users/admin/Desktop/imgupload/img-util-c++/build64/CMakeFiles/ALL_BUILD.dir
+C:/Users/admin/Desktop/imgupload/img-util-c++/build64/CMakeFiles/ZERO_CHECK.dir

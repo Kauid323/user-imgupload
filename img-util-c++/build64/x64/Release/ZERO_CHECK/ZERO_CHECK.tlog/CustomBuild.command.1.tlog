@@ -1,0 +1,10 @@
+^C:\USERS\ADMIN\DESKTOP\IMGUPLOAD\IMG-UTIL-C++\BUILD64\CMAKEFILES\6B9E77B738F23B9A91BF463FC8A4AF55\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/admin/Desktop/imgupload/img-util-c++ -BC:/Users/admin/Desktop/imgupload/img-util-c++/build64 --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/admin/Desktop/imgupload/img-util-c++/build64/img_util_cpp.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

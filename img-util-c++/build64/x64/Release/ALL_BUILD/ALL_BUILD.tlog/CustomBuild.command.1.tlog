@@ -1,0 +1,10 @@
+^C:\USERS\ADMIN\DESKTOP\IMGUPLOAD\IMG-UTIL-C++\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/admin/Desktop/imgupload/img-util-c++ -BC:/Users/admin/Desktop/imgupload/img-util-c++/build64 --check-stamp-file C:/Users/admin/Desktop/imgupload/img-util-c++/build64/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

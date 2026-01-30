@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Img Upload (Qiniu)</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; margin:24px; max-width:980px}
+    .row{display:flex; gap:16px; flex-wrap:wrap}
+    .card{border:1px solid #e5e7eb; border-radius:12px; padding:16px; flex:1; min-width:300px}
+    label{display:block; font-weight:600; margin-bottom:8px}
+    input[type=text], textarea{width:100%; box-sizing:border-box; padding:10px; border-radius:10px; border:1px solid #d1d5db; outline:none}
+    textarea{min-height:140px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    button{padding:10px 14px; border-radius:10px; border:1px solid #111827; background:#111827; color:#fff; cursor:pointer}
+    button:disabled{opacity:.6; cursor:not-allowed}
+    .muted{color:#6b7280; font-size:12px; line-height:1.5}
+    .ok{color:#065f46}
+    .err{color:#b91c1c}
+    .kv{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:#111827}
+  </style>
+</head>
+<body>
+  <h1>图片上传（七牛）</h1>
+  <div class="muted">
+    说明：这是纯前端实现。你需要用本地 HTTP server 打开；URL 下载/七牛接口可能遇到 CORS 限制。
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <div class="card">
+      <label>配置（config.json）</label>
+      <div class="muted">页面会自动加载同目录的 <span class="kv">config.json</span>。</div>
+      <pre id="cfg" class="kv" style="white-space:pre-wrap; margin-top:12px"></pre>
+      <div id="cfgErr" class="muted err"></div>
+    </div>
+
+    <div class="card">
+      <label>输入图片</label>
+      <div style="margin-bottom:10px">
+        <div class="muted">本地文件</div>
+        <input id="file" type="file" accept="image/*" />
+      </div>
+      <div>
+        <div class="muted">或输入 URL（需 CORS）</div>
+        <input id="url" type="text" placeholder="https://example.com/a.png" />
+      </div>
+
+      <div style="margin-top:12px" class="row">
+        <button id="btn">上传</button>
+        <div id="status" class="muted"></div>
+      </div>
+
+      <div style="margin-top:12px" class="muted">
+        生成规则：对最终上传字节计算 MD5 作为 key（<span class="kv">md5.ext</span>）。
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <label>结果</label>
+    <textarea id="out" readonly></textarea>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  let cfg = null;
+
+  async function loadConfig() {
+    try {
+      const r = await fetch('./config.json', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      cfg = await r.json();
+      $('cfg').textContent = JSON.stringify(cfg, null, 2);
+    } catch (e) {
+      $('cfgErr').textContent = '加载 config.json 失败：' + String(e);
+      cfg = null;
+    }
+  }
+
+  // Minimal MD5 implementation (public-domain style)
+  function md5(bytes) {
+    function toWords(u8) {
+      const words = [];
+      for (let i = 0; i < u8.length; i += 4) {
+        words.push((u8[i] | (u8[i+1] << 8) | (u8[i+2] << 16) | (u8[i+3] << 24)) >>> 0);
+      }
+      return words;
+    }
+    function rotl(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
+    function add(x, y) { return (x + y) >>> 0; }
+    function cmn(q, a, b, x, s, t) { return add(rotl(add(add(a, q), add(x, t)), s), b); }
+    function ff(a,b,c,d,x,s,t){ return cmn((b & c) | (~b & d), a,b,x,s,t); }
+    function gg(a,b,c,d,x,s,t){ return cmn((b & d) | (c & ~d), a,b,x,s,t); }
+    function hh(a,b,c,d,x,s,t){ return cmn(b ^ c ^ d, a,b,x,s,t); }
+    function ii(a,b,c,d,x,s,t){ return cmn(c ^ (b | ~d), a,b,x,s,t); }
+
+    const msg = new Uint8Array(bytes);
+    const origLen = msg.length;
+    const withOne = origLen + 1;
+    const padLen = (withOne % 64 <= 56) ? (56 - (withOne % 64)) : (56 + 64 - (withOne % 64));
+    const totalLen = withOne + padLen + 8;
+    const buf = new Uint8Array(totalLen);
+    buf.set(msg, 0);
+    buf[origLen] = 0x80;
+
+    const bitLen = origLen * 8;
+    for (let i = 0; i < 8; i++) buf[totalLen - 8 + i] = (bitLen >>> (8 * i)) & 0xff;
+
+    let a0 = 0x67452301;
+    let b0 = 0xefcdab89;
+    let c0 = 0x98badcfe;
+    let d0 = 0x10325476;
+
+    const k = [
+      0xd76aa478,0xe8c7b756,0x242070db,0xc1bdceee,0xf57c0faf,0x4787c62a,0xa8304613,0xfd469501,
+      0x698098d8,0x8b44f7af,0xffff5bb1,0x895cd7be,0x6b901122,0xfd987193,0xa679438e,0x49b40821,
+      0xf61e2562,0xc040b340,0x265e5a51,0xe9b6c7aa,0xd62f105d,0x02441453,0xd8a1e681,0xe7d3fbc8,
+      0x21e1cde6,0xc33707d6,0xf4d50d87,0x455a14ed,0xa9e3e905,0xfcefa3f8,0x676f02d9,0x8d2a4c8a,
+      0xfffa3942,0x8771f681,0x6d9d6122,0xfde5380c,0xa4beea44,0x4bdecfa9,0xf6bb4b60,0xbebfbc70,
+      0x289b7ec6,0xeaa127fa,0xd4ef3085,0x04881d05,0xd9d4d039,0xe6db99e5,0x1fa27cf8,0xc4ac5665,
+      0xf4292244,0x432aff97,0xab9423a7,0xfc93a039,0x655b59c3,0x8f0ccc92,0xffeff47d,0x85845dd1,
+      0x6fa87e4f,0xfe2ce6e0,0xa3014314,0x4e0811a1,0xf7537e82,0xbd3af235,0x2ad7d2bb,0xeb86d391
+    ];
+    const r = [
+      7,12,17,22, 7,12,17,22, 7,12,17,22, 7,12,17,22,
+      5,9,14,20, 5,9,14,20, 5,9,14,20, 5,9,14,20,
+      4,11,16,23, 4,11,16,23, 4,11,16,23, 4,11,16,23,
+      6,10,15,21, 6,10,15,21, 6,10,15,21, 6,10,15,21
+    ];
+
+    for (let off = 0; off < buf.length; off += 64) {
+      const chunk = buf.subarray(off, off + 64);
+      const x = toWords(chunk);
+
+      let a = a0, b = b0, c = c0, d = d0;
+      for (let i = 0; i < 64; i++) {
+        let f;
+        let g;
+        if (i < 16) { f = ff; g = i; }
+        else if (i < 32) { f = gg; g = (5*i + 1) % 16; }
+        else if (i < 48) { f = hh; g = (3*i + 5) % 16; }
+        else { f = ii; g = (7*i) % 16; }
+        const tmp = d;
+        d = c;
+        c = b;
+        b = f(a,b,c,tmp, x[g] >>> 0, r[i], k[i]);
+        a = tmp;
+      }
+
+      a0 = add(a0, a);
+      b0 = add(b0, b);
+      c0 = add(c0, c);
+      d0 = add(d0, d);
+    }
+
+    function toHexLE(n) {
+      let s = '';
+      for (let i = 0; i < 4; i++) {
+        const b = (n >>> (8 * i)) & 0xff;
+        s += b.toString(16).padStart(2, '0');
+      }
+      return s;
+    }
+
+    return toHexLE(a0) + toHexLE(b0) + toHexLE(c0) + toHexLE(d0);
+  }
+
+  async function fileToBytes(file) {
+    return new Uint8Array(await file.arrayBuffer());
+  }
+
+  async function urlToBytes(url) {
+    const r = await fetch(url, { mode: 'cors' });
+    if (!r.ok) throw new Error('download failed: HTTP ' + r.status);
+    const ab = await r.arrayBuffer();
+    return new Uint8Array(ab);
+  }
+
+  async function maybeToWebp(bytes, quality) {
+    const blob = new Blob([bytes]);
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('image decode failed'));
+      i.src = URL.createObjectURL(blob);
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const q = typeof quality === 'number' ? Math.max(0, Math.min(1, quality)) : 0.95;
+    const webpBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', q));
+    if (!webpBlob) throw new Error('webp conversion failed');
+    const buf = new Uint8Array(await webpBlob.arrayBuffer());
+    return buf;
+  }
+
+  async function getQiniuUploadToken(userToken, url) {
+    const r = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'token': userToken,
+        'Content-Type': 'application/json',
+      },
+    });
+    const text = await r.text();
+    if (!r.ok) throw new Error('qiniu-token failed: ' + r.status + ' ' + text);
+    const obj = JSON.parse(text);
+    if (obj.code !== 1) throw new Error('qiniu-token bad code');
+    return String(obj.token || '');
+  }
+
+  async function queryUploadHost(uploadToken, bucket) {
+    const ak = uploadToken.split(':')[0] || uploadToken;
+    const url = `https://api.qiniu.com/v4/query?ak=${encodeURIComponent(ak)}&bucket=${encodeURIComponent(bucket)}`;
+    try {
+      const r = await fetch(url);
+      const text = await r.text();
+      if (!r.ok) return DEFAULT_UPLOAD_HOST;
+      const obj = JSON.parse(text);
+      const domains = obj && obj.domains;
+      if (Array.isArray(domains) && typeof domains[0] === 'string' && domains[0]) {
+        let host = domains[0];
+        host = host.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+        return host || DEFAULT_UPLOAD_HOST;
+      }
+      return DEFAULT_UPLOAD_HOST;
+    } catch {
+      return DEFAULT_UPLOAD_HOST;
+    }
+  }
+
+  async function uploadOnce(uploadUrl, token, key, bytes, mimeType) {
+    const form = new FormData();
+    form.append('token', token);
+    form.append('key', key);
+    form.append('file', new Blob([bytes], { type: mimeType }), key);
+
+    const r = await fetch(uploadUrl, {
+      method: 'POST',
+      body: form,
+      headers: {
+        'User-Agent': 'QiniuDart'
+      }
+    });
+    const text = await r.text();
+    return { status: r.status, text };
+  }
+
+  function pretty(text) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      return text;
+    }
+  }
+
+  function setStatus(msg, cls) {
+    const el = $('status');
+    el.className = 'muted ' + (cls || '');
+    el.textContent = msg;
+  }
+
+  $('btn').addEventListener('click', async () => {
+    $('out').value = '';
+    setStatus('', '');
+
+    if (!cfg) {
+      $('out').value = 'config.json 未加载成功';
+      return;
+    }
+    if (!cfg.user_token) {
+      $('out').value = 'config.json 里的 user_token 为空';
+      return;
+    }
+
+    const btn = $('btn');
+    btn.disabled = true;
+
+    try {
+      const f = $('file').files && $('file').files[0];
+      const url = $('url').value.trim();
+
+      let bytes;
+      let name = 'image';
+      let ext = 'bin';
+      let mimeType = 'application/octet-stream';
+
+      if (f) {
+        bytes = await fileToBytes(f);
+        name = f.name || 'image';
+        mimeType = f.type || 'application/octet-stream';
+      } else if (url) {
+        bytes = await urlToBytes(url);
+        try { name = new URL(url).pathname.split('/').pop() || 'image'; } catch {}
+      } else {
+        throw new Error('请选择本地文件或输入 URL');
+      }
+
+      if (cfg.enable_webp) {
+        setStatus('WebP 转换中...', '');
+        bytes = await maybeToWebp(bytes, cfg.webp_quality);
+        mimeType = 'image/webp';
+        ext = 'webp';
+      } else {
+        const dot = name.lastIndexOf('.');
+        if (dot >= 0 && dot + 1 < name.length) ext = name.slice(dot + 1);
+      }
+
+      setStatus('计算 MD5...', '');
+      const key = md5(bytes) + '.' + ext;
+
+      setStatus('获取上传 token...', '');
+      const upToken = await getQiniuUploadToken(cfg.user_token, cfg.qiniu_token_url);
+
+      setStatus('查询上传域名...', '');
+      const host = await queryUploadHost(upToken, cfg.bucket);
+      let uploadUrl = 'https://' + host;
+
+      setStatus('上传中...', '');
+      let r = await uploadOnce(uploadUrl, upToken, key, bytes, mimeType);
+      if (r.status < 200 || r.status >= 300) {
+        if (r.text.includes('no such domain')) {
+          uploadUrl = 'https://' + DEFAULT_UPLOAD_HOST;
+          r = await uploadOnce(uploadUrl, upToken, key, bytes, mimeType);
+        }
+      }
+
+      if (r.status < 200 || r.status >= 300) {
+        throw new Error('qiniu upload failed: ' + r.status + ' ' + r.text);
+      }
+
+      setStatus('上传成功', 'ok');
+      $('out').value = pretty(r.text);
+    } catch (e) {
+      setStatus('失败', 'err');
+      $('out').value = String(e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  loadConfig();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "user_token": "",
+  "enable_webp": false,
+  "webp_quality": 95,
+  "bucket": "chat68",
+  "qiniu_token_url": "https://chat-go.jwzhd.com/v1/misc/qiniu-token"
+}
