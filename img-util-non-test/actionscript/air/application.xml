@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<application xmlns="http://ns.adobe.com/air/application/33.1">
+  <id>com.example.imgutil</id>
+  <versionNumber>1.0.0</versionNumber>
+  <filename>ImgUtil</filename>
+  <name>ImgUtil</name>
+  <initialWindow>
+    <content>Main.swf</content>
+    <systemChrome>standard</systemChrome>
+    <transparent>false</transparent>
+    <visible>true</visible>
+    <width>480</width>
+    <height>320</height>
+  </initialWindow>
+</application>
