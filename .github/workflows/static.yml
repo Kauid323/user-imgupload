@@ -37,10 +37,10 @@ jobs:
           echo '<!DOCTYPE html>
           <html>
             <head>
-              <meta http-equiv="refresh" content="0; url=./img-util-web/main.html" />
+              <meta http-equiv="refresh" content="0; url=./img-util-web/index.html" />
             </head>
             <body>
-              <p>Redirecting to <a href="./img-util-web/main.html">main.html</a></p>
+              <p>Redirecting to <a href="./img-util-web/index.html">index.html</a></p>
             </body>
           </html>' > index.html
           
