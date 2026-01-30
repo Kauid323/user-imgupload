@@ -3,6 +3,12 @@ set -euo pipefail
 
 DEFAULT_UPLOAD_HOST="upload-z2.qiniup.com"
 
+USER_TOKEN=""
+ENABLE_WEBP="false"
+WEBP_QUALITY="95"
+BUCKET="chat-68"
+TOKEN_URL="https://chat-go.jwzhd.com/v1/misc/qiniu-token"
+
 trim() {
   local s="$1"
   s="${s##+([[:space:]])}"
@@ -26,17 +32,35 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 die() { echo "$1" >&2; exit 1; }
 
+debug_enabled() {
+  [[ -n "${IMGUTIL_DEBUG:-}" && "${IMGUTIL_DEBUG:-}" != "0" ]]
+}
+
+debug_log() {
+  if debug_enabled; then
+    echo "[debug] $1" >&2
+  fi
+}
+
 json_get() {
   local key="$1"
   local def="$2"
   if have jq; then
-    jq -r --arg k "$key" '.[$k] // empty' config.json 2>/dev/null || true
+    local v
+    v=$(jq -r --arg k "$key" '.[$k] // empty' config.json 2>/dev/null || true)
+    v=${v//$'\r'/}
+    v=${v//$'\n'/}
+    if [[ -z "$v" ]]; then
+      echo "$def"
+    else
+      echo "$v"
+    fi
   else
     local v
     v=$(grep -oE '"'"$key"'"[[:space:]]*:[[:space:]]*([^,}]+)' config.json | head -n1 | sed -E 's/^.*:[[:space:]]*//' || true)
     v=${v//$'\r'/}
     v=${v//$'\n'/}
-    if [[ "$v" == "" ]]; then echo ""; return; fi
+    if [[ "$v" == "" ]]; then echo "$def"; return; fi
     if [[ "$v" =~ ^\".*\"$ ]]; then
       echo "${v:1:${#v}-2}"
     else
@@ -67,13 +91,18 @@ md5_hex_file() {
 get_upload_token() {
   local user_token="$1"
   local token_url="$2"
+  token_url=${token_url//$'\r'/}
+  token_url=${token_url//$'\n'/}
+  debug_log "token_url=${token_url}"
+  [[ -n "$token_url" ]] || return 1
+  [[ "$token_url" =~ ^https?:// ]] || return 1
   local resp
   resp=$(curl -sS "$token_url" -H "token: $user_token" -H "Content-Type: application/json") || return 1
   if have jq; then
     local code token
     code=$(echo "$resp" | jq -r '.code // 0' 2>/dev/null || echo 0)
     [[ "$code" == "1" ]] || return 1
-    token=$(echo "$resp" | jq -r '.token // empty' 2>/dev/null || true)
+    token=$(echo "$resp" | jq -r '.data.token // .token // empty' 2>/dev/null || true)
     [[ -n "$token" ]] || return 1
     echo "$token"
     return 0
@@ -110,16 +139,18 @@ query_upload_host() {
 }
 
 main() {
-  [[ -f config.json ]] || die "config.json not found"
-
   local user_token enable_webp webp_quality bucket token_url
-  user_token=$(json_get user_token "")
-  enable_webp=$(json_get enable_webp "false")
-  webp_quality=$(json_get webp_quality "95")
-  bucket=$(json_get bucket "chat68")
-  token_url=$(json_get qiniu_token_url "https://chat-go.jwzhd.com/v1/misc/qiniu-token")
+  user_token="$USER_TOKEN"
+  enable_webp="$ENABLE_WEBP"
+  webp_quality="$WEBP_QUALITY"
+  bucket="$BUCKET"
+  token_url="$TOKEN_URL"
 
-  [[ -n "$user_token" ]] || die "config.json里的 user_token 为空"
+  debug_log "bucket=${bucket}"
+  debug_log "enable_webp=${enable_webp}"
+  debug_log "webp_quality=${webp_quality}"
+
+  [[ -n "$user_token" ]] || die "user_token 为空（请在 main.sh 设置 USER_TOKEN）"
 
   have curl || die "curl not found"
 

@@ -11,6 +11,17 @@ import mime from 'mime-types';
 
 const DEFAULT_UPLOAD_HOST = 'upload-z2.qiniup.com';
 
+function debugEnabled(): boolean {
+  const v = process.env.IMGUTIL_DEBUG;
+  return !!v && v !== '0';
+}
+
+function debugLog(msg: string): void {
+  if (debugEnabled()) {
+    console.error(`[debug] ${msg}`);
+  }
+}
+
 type Config = {
   user_token: string;
   enable_webp: boolean;
@@ -99,17 +110,39 @@ function md5Hex(bytes: Buffer): string {
 }
 
 async function getQiniuUploadToken(userToken: string, tokenUrl: string): Promise<string> {
-  const resp = await axios.get(tokenUrl, {
-    headers: {
-      token: userToken,
-      'Content-Type': 'application/json',
-    },
-    timeout: 60000,
-  });
-  const data = resp.data;
-  if (!data || typeof data !== 'object') return '';
-  if ((data as any).code !== 1) return '';
-  return String((data as any).token ?? '');
+  try {
+    const resp = await axios.get(tokenUrl, {
+      headers: {
+        token: userToken,
+        'Content-Type': 'application/json',
+      },
+      timeout: 60000,
+      validateStatus: () => true,
+    });
+
+    debugLog(`qiniu-token status=${resp.status}`);
+    if (debugEnabled()) {
+      const bodyStr = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
+      debugLog(`qiniu-token body=${bodyStr}`);
+    }
+
+    if (resp.status < 200 || resp.status >= 300) return '';
+
+    const data = resp.data;
+    if (!data || typeof data !== 'object') return '';
+    if ((data as any).code !== 1) return '';
+
+    const token1 = (data as any)?.data?.token;
+    if (typeof token1 === 'string' && token1.length > 0) return token1;
+
+    const token2 = (data as any)?.token;
+    if (typeof token2 === 'string' && token2.length > 0) return token2;
+
+    return '';
+  } catch (e: any) {
+    debugLog(`qiniu-token request failed: ${String(e?.message ?? e)}`);
+    return '';
+  }
 }
 
 async function queryUploadHost(uploadToken: string, bucket: string): Promise<string> {

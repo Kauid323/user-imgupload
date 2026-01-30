@@ -14,17 +14,17 @@ Run:
 
 ```bash
 npm run build
-npm run start -- "<image_path_or_url>"
+npm run start -- "C:\Users\admin\Pictures\xxx.png"
 ```
 
 Or dev mode:
 
 ```bash
-npm run dev -- "<image_path_or_url>"
+npm run dev -- "C:\Users\admin\Pictures\xxx.png"
 ```
 
 If you omit the argument, the program will prompt for input.
 
-Config: edit `config.json` (same fields as python version).
+Config: edit `config.json`
 
 Note: If `enable_webp=true`, this tool calls external `cwebp`.

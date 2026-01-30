@@ -6,6 +6,8 @@ local function read_all(path)
   return d
 end
 
+local DEFAULT_UPLOAD_HOST = "upload-z2.qiniup.com"
+
 local function write_all(path, data)
   local f = io.open(path, "wb")
   if not f then return false end
@@ -282,6 +284,9 @@ local function get_upload_token(cfg)
   local codev = json_get_int(out, "code", 0)
   if codev ~= 1 then return nil, "qiniu-token bad code" end
   local token = json_get_string(out, "token", "")
+  if token == "" then
+    token = out:match('"data"%s*:%s*%{.-"token"%s*:%s*"([^"]+)"') or ""
+  end
   if token == "" then return nil, "qiniu-token missing token" end
   return token, nil
 end
@@ -323,9 +328,44 @@ local function upload_file(upload_url, upload_token, key, file_path)
   return out, nil
 end
 
-local function load_config()
-  local txt = read_all("config.json")
-  if not txt then error("config.json not found") end
+local function get_script_dir()
+  local p = arg and arg[0] or nil
+  if not p or p == "" then return nil end
+  local sep = package.config:sub(1,1)
+  p = p:gsub('^"(.*)"$', '%1')
+  local dir = p:match("^(.*" .. sep .. ").*$")
+  if dir and dir ~= "" then
+    dir = dir:gsub(sep .. "$", "")
+    return dir
+  end
+  return nil
+end
+
+local function parse_args(argv)
+  local out = { input = nil, config = nil }
+  local i = 1
+  while argv and argv[i] do
+    local a = argv[i]
+    if a == "--config" or a == "-c" then
+      out.config = argv[i + 1]
+      i = i + 2
+    elseif a == "--help" or a == "-h" then
+      io.write("Usage:\n")
+      io.write("  lua main.lua [--config <config.json>] <image_path_or_url>\n")
+      return out, true
+    elseif not out.input then
+      out.input = a
+      i = i + 1
+    else
+      i = i + 1
+    end
+  end
+  return out, false
+end
+
+local function load_config(cfg_path)
+  local txt = read_all(cfg_path)
+  if not txt then error("config.json not found: " .. tostring(cfg_path)) end
   local cfg = {
     user_token = json_get_string(txt, "user_token", ""),
     enable_webp = json_get_bool(txt, "enable_webp", false),
@@ -337,7 +377,20 @@ local function load_config()
 end
 
 local function main()
-  local cfg = load_config()
+  local parsed, show_help = parse_args(arg)
+  if show_help then return 0 end
+
+  local cfgPath = parsed.config
+  if not cfgPath or cfgPath == "" then
+    local sd = get_script_dir()
+    if sd and sd ~= "" then
+      cfgPath = sd .. package.config:sub(1,1) .. "config.json"
+    else
+      cfgPath = "config.json"
+    end
+  end
+
+  local cfg = load_config(cfgPath)
   if cfg.user_token == "" then
     io.write("config.json里的 user_token 为空\n")
     return 1
@@ -345,7 +398,7 @@ local function main()
 
   ensure_tools(cfg)
 
-  local input = arg[1]
+  local input = parsed.input
   if not input or input == "" then
     io.write("请输入图片地址(本地路径或URL): ")
     input = io.read("*l")

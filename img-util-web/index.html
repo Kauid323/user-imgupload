@@ -27,10 +27,31 @@
 
   <div class="row" style="margin-top:16px">
     <div class="card">
-      <label>配置（config.json）</label>
-      <div class="muted">页面会自动加载同目录的 <span class="kv">config.json</span>。</div>
-      <pre id="cfg" class="kv" style="white-space:pre-wrap; margin-top:12px"></pre>
-      <div id="cfgErr" class="muted err"></div>
+      <label>配置</label>
+
+      <div style="margin-top:12px">
+        <div class="muted">user_token</div>
+        <input id="userToken" type="text" placeholder="64c1....-....-4...-..." />
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="muted">bucket</div>
+        <input id="bucket" type="text" value="chat68" />
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="muted">qiniu_token_url</div>
+        <input id="tokenUrl" type="text" value="https://chat-go.jwzhd.com/v1/misc/qiniu-token" />
+      </div>
+
+      <div style="margin-top:12px">
+        <label style="font-weight:600; margin:0">
+          <input id="enableWebp" type="checkbox" />
+          启用 WebP
+        </label>
+        <div class="muted">webp_quality（0-1）</div>
+        <input id="webpQuality" type="text" value="0.95" />
+      </div>
     </div>
 
     <div class="card">
@@ -63,18 +84,22 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
-  let cfg = null;
+  const DEFAULT_UPLOAD_HOST = 'upload-z2.qiniup.com';
 
-  async function loadConfig() {
-    try {
-      const r = await fetch('./config.json', { cache: 'no-store' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      cfg = await r.json();
-      $('cfg').textContent = JSON.stringify(cfg, null, 2);
-    } catch (e) {
-      $('cfgErr').textContent = '加载 config.json 失败：' + String(e);
-      cfg = null;
-    }
+  function readCfg() {
+    const enableWebp = !!$('enableWebp').checked;
+    const qRaw = String($('webpQuality').value || '').trim();
+    let q = Number(qRaw);
+    if (!Number.isFinite(q)) q = 0.95;
+    q = Math.max(0, Math.min(1, q));
+
+    return {
+      user_token: String($('userToken').value || '').trim(),
+      enable_webp: enableWebp,
+      webp_quality: q,
+      bucket: String($('bucket').value || '').trim() || 'chat68',
+      qiniu_token_url: String($('tokenUrl').value || '').trim() || 'https://chat-go.jwzhd.com/v1/misc/qiniu-token',
+    };
   }
 
   // Minimal MD5 implementation (public-domain style)
@@ -210,7 +235,7 @@
     if (!r.ok) throw new Error('qiniu-token failed: ' + r.status + ' ' + text);
     const obj = JSON.parse(text);
     if (obj.code !== 1) throw new Error('qiniu-token bad code');
-    return String(obj.token || '');
+    return String((obj && obj.data && obj.data.token) || obj.token || '');
   }
 
   async function queryUploadHost(uploadToken, bucket) {
@@ -268,12 +293,9 @@
     $('out').value = '';
     setStatus('', '');
 
-    if (!cfg) {
-      $('out').value = 'config.json 未加载成功';
-      return;
-    }
+    const cfg = readCfg();
     if (!cfg.user_token) {
-      $('out').value = 'config.json 里的 user_token 为空';
+      $('out').value = 'user_token 为空';
       return;
     }
 
@@ -342,8 +364,6 @@
       btn.disabled = false;
     }
   });
-
-  loadConfig();
 </script>
 </body>
 </html>

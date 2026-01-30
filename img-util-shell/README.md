@@ -16,4 +16,12 @@ bash main.sh "<image_path_or_url>"
 
 If you omit the argument, the script will prompt for input.
 
-Config: edit `config.json`.
+Config: edit `main.sh` top variables.
+For example:
+```
+USER_TOKEN="xxxxxxx"
+ENABLE_WEBP="false"
+WEBP_QUALITY="95"
+BUCKET="chat-68"
+TOKEN_URL="https://chat-go.jwzhd.com/v1/misc/qiniu-token"
+```
